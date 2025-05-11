@@ -2,21 +2,22 @@ package app
 
 import (
 	"database/sql"
-	"time"
-
 	"log"
-	"medodstest/internal/pkg"
-	"medodstest/internal/storage"
 	"net/http"
 	"os"
+	"time"
 
+	"github.com/HaoAsakura123/medodsTest/internal/pkg"
+	"github.com/HaoAsakura123/medodsTest/internal/storage"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	_ "github.com/HaoAsakura123/medodsTest/docs"
+	"github.com/swaggo/files"       // swagger embed files
 	"github.com/swaggo/gin-swagger" // gin-swagger middleware
- 	"github.com/swaggo/files" // swagger embed files
-	//docs "github.com/medodstest/docs"
 )
+
+
 
 func InitRouter(){
 	var db *storage.Database
@@ -30,16 +31,15 @@ func InitRouter(){
 
 	r.Use(DatabaseMiddleware(db))
 
-	r.POST("register", RegisterHandler)
+	r.POST("/register", RegisterHandler)
 	r.POST("/login", LoginHandler)
 	authGroup := r.Group("/auth")
 	authGroup.Use(AuthMiddleware())
 	{
 		authGroup.GET("/about", InfoAboutHandler)
 		authGroup.POST("/refresh", RefreshHandler)
-		authGroup.DELETE("/logout", LogOutHandler) // удаляет из бд строку с таким refresh токеном
+		authGroup.DELETE("/logout", LogOutHandler) 
 	}
-	
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.Run(":8080")
 }
@@ -54,17 +54,14 @@ func DatabaseMiddleware(db *storage.Database) gin.HandlerFunc {
 	}
 }
 
-//	@Summary		Login user
-//	@Description	Login by UUID and receive JWT and refresh token
-//	@Tags			Auth
-//	@Accept			json
-//	@Produce		json
-//	@Param			user	body		storage.User	true	"User UUID"
-//	@Success		201		{object}	map[string]string
-//	@Failure		400		{object}	map[string]string
-//	@Failure		404		{object}	map[string]string
-//	@Failure		500		{object}	map[string]string
-//	@Router			/login [post]
+// @Summary LoginHandler
+// @Description Login by UUID and receive JWT and refresh token
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param user body storage.User true "User UUID"
+// @Success 201 {object} map[string]string
+// @Router /login [post]
 
 func LoginHandler(c *gin.Context) {
 	// генерация jwt refresh token по uuid
@@ -139,16 +136,16 @@ func LoginHandler(c *gin.Context) {
 
 }
 
-//	@Summary		Register user
-//	@Description	Register user by email and receive UUID
-//	@Tags			Auth
-//	@Accept			json
-//	@Produce		json
-//	@Param			user	body		map[string]string	true	"User Email"
-//	@Success		200		{object}	map[string]string
-//	@Failure		400		{object}	map[string]string
-//	@Failure		500		{object}	map[string]string
-//	@Router			/register [post]
+// @Summary      Register a new user
+// @Description  Register a user by email and receive a UUID
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        user  body      map[string]string  true  "User Email"
+// @Success      200   {object}  map[string]string  "User successfully registered"
+// @Failure      400   {object}  map[string]string  "Validation error"
+// @Failure      500   {object}  map[string]string  "Internal server error"
+// @Router       /register [post]
 
 func RegisterHandler(c *gin.Context) {
 	pass := os.Getenv("POSTGRES_PASSWORD")
@@ -200,9 +197,13 @@ type Auth_User struct {
 	GUID string `json:"uuid"`
 }
 
-// AuthMiddleware godoc
-// @Security ApiKeyAuth
-// @Param Authorisation header string true "JWT Token"
+// @Summary      Authorization Middleware
+// @Description  Middleware to validate JWT token and refresh token
+// @Tags         Middleware
+// @Security     ApiKeyAuth
+// @Param        Authorization  header    string  true  "JWT Token"
+// @Failure      401            {object}  map[string]string  "Unauthorized"
+// @Failure      500            {object}  map[string]string  "Internal Server Error"
 
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -278,14 +279,15 @@ func AuthMiddleware() gin.HandlerFunc {
 		//нужно 
 	}
 }
-//	@Summary		Get user info
-//	@Description	Get information about authorized user
-//	@Tags			Auth
-//	@Produce		json
-//	@Success		200	{object}	map[string]string
-//	@Failure		401	{object}	map[string]string
-//	@Router			/auth/about [get]
-//	@Security		ApiKeyAuth
+
+// @Summary      Get information about authorized user
+// @Description  Retrieve information about the currently authorized user
+// @Tags         Auth
+// @Produce      json
+// @Success      200  {object}  map[string]string  "Successfully retrieved user information"
+// @Failure      401  {object}  map[string]string  "Unauthorized"
+// @Router       /auth/about [get]
+// @Security     ApiKeyAuth
 
 func InfoAboutHandler(c *gin.Context) {
 	guid, exist := c.Get("guid")
@@ -305,15 +307,16 @@ func InfoAboutHandler(c *gin.Context) {
 		"refresh": refresh,
 	})
 }
-//	@Summary		Refresh token
-//	@Description	Refresh JWT and refresh token using previous refresh token
-//	@Tags			Auth
-//	@Produce		json
-//	@Success		202	{object}	map[string]string
-//	@Failure		401	{object}	map[string]string
-//	@Failure		500	{object}	map[string]string
-//	@Router			/auth/refresh [post]
-//	@Security		ApiKeyAuth
+
+// @Summary      Refresh JWT and refresh token
+// @Description  Refresh JWT and refresh token using the previous refresh token
+// @Tags         Auth
+// @Produce      json
+// @Success      202  {object}  map[string]string  "Tokens successfully refreshed"
+// @Failure      401  {object}  map[string]string  "Unauthorized"
+// @Failure      500  {object}  map[string]string  "Internal server error"
+// @Router       /auth/refresh [post]
+// @Security     ApiKeyAuth
 
 func RefreshHandler(c *gin.Context) {
 	// нужно удалить токен из базы данных
@@ -392,24 +395,16 @@ func RefreshHandler(c *gin.Context) {
 }
 
 
-// func UserAgentMiddleware() gin.HandlerFunc {
-// 	return func(c *gin.Context) {
-// 		//проверить user-agent
-// 		//может даже добавить его в бд для сравнения последующего
-// 		c.Next()
 
-// 	}
-// }
-
-//	@Summary		Logout user
-//	@Description	Delete user's auth data from database
-//	@Tags			Auth
-//	@Produce		json
-//	@Success		200	{object}	map[string]string
-//	@Failure		401	{object}	map[string]string
-//	@Failure		500	{object}	map[string]string
-//	@Router			/auth/logout [post]
-//	@Security		ApiKeyAuth
+// @Summary      Log out user
+// @Description  Delete user's authentication data from the database
+// @Tags         Auth
+// @Produce      json
+// @Success      200  {object}  map[string]string  "Successfully logged out"
+// @Failure      401  {object}  map[string]string  "Unauthorized"
+// @Failure      500  {object}  map[string]string  "Internal server error"
+// @Router       /auth/logout [post]
+// @Security     ApiKeyAuth
 
 func LogOutHandler(c *gin.Context){
 	value, exist := c.Get("guid")

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log"
 	//"math/rand"
-	"medodstest/internal/storage"
+	"github.com/HaoAsakura123/medodsTest/internal/storage"
 	"strconv"
 	"strings"
 	"time"
