@@ -21,6 +21,10 @@ type User struct {
 	GUID  string `json:"uuid" binding:"required"`
 }
 
+type Tokens struct {
+	Authorisation string `json:"authorisation" binding:"required"`
+	Refresh string      `json:"refresh" binding:"required"`
+}
 const (
 	users = `
     CREATE TABLE IF NOT EXISTS users (

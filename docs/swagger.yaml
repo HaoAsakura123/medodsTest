@@ -1,4 +1,24 @@
 basePath: /
+definitions:
+  storage.Tokens:
+    properties:
+      authorisation:
+        type: string
+      refresh:
+        type: string
+    required:
+    - authorisation
+    - refresh
+    type: object
+  storage.User:
+    properties:
+      email:
+        type: string
+      uuid:
+        type: string
+    required:
+    - uuid
+    type: object
 host: localhost:8080
 info:
   contact:
@@ -11,7 +31,168 @@ info:
   termsOfService: http://swagger.io/terms/
   title: TODO App API
   version: "1.0"
-paths: {}
+paths:
+  /auth/about:
+    get:
+      description: Retrieve information about the currently authorized user
+      parameters:
+      - description: JWT Token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved user information
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get information about authorized user
+      tags:
+      - Auth
+  /auth/logout:
+    post:
+      description: Delete user's authentication data from the database
+      parameters:
+      - description: User UUID
+        in: body
+        name: GUID
+        required: true
+        schema:
+          $ref: '#/definitions/storage.User'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully logged out
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Log out user
+      tags:
+      - Auth
+  /auth/refresh:
+    post:
+      description: Refresh JWT and refresh token using the previous refresh token
+      parameters:
+      - description: Tokens
+        in: body
+        name: Tokens
+        required: true
+        schema:
+          $ref: '#/definitions/storage.Tokens'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Tokens successfully refreshed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Refresh JWT and refresh token
+      tags:
+      - Auth
+  /login:
+    post:
+      consumes:
+      - application/json
+      description: Login by UUID and receive JWT and refresh token
+      parameters:
+      - description: User UUID
+        in: body
+        name: GUID
+        required: true
+        schema:
+          $ref: '#/definitions/storage.User'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: LoginHandler
+      tags:
+      - Auth
+  /register:
+    post:
+      consumes:
+      - application/json
+      description: Register a user by email and receive a UUID
+      parameters:
+      - description: User UUID
+        in: body
+        name: GUID
+        required: true
+        schema:
+          $ref: '#/definitions/storage.User'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User successfully registered
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Validation error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Register a new user
+      tags:
+      - Auth
 schemes:
 - http
 securityDefinitions:

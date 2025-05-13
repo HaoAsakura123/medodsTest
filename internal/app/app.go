@@ -59,10 +59,9 @@ func DatabaseMiddleware(db *storage.Database) gin.HandlerFunc {
 // @Tags Auth
 // @Accept json
 // @Produce json
-// @Param user body storage.User true "User UUID"
+// @Param GUID body storage.User true "User UUID"
 // @Success 201 {object} map[string]string
 // @Router /login [post]
-
 func LoginHandler(c *gin.Context) {
 	// генерация jwt refresh token по uuid
 	user := storage.User{}
@@ -141,12 +140,11 @@ func LoginHandler(c *gin.Context) {
 // @Tags         Auth
 // @Accept       json
 // @Produce      json
-// @Param        user  body      map[string]string  true  "User Email"
+// @Param GUID body storage.User true "User UUID"
 // @Success      200   {object}  map[string]string  "User successfully registered"
 // @Failure      400   {object}  map[string]string  "Validation error"
 // @Failure      500   {object}  map[string]string  "Internal server error"
 // @Router       /register [post]
-
 func RegisterHandler(c *gin.Context) {
 	pass := os.Getenv("POSTGRES_PASSWORD")
 	value, exists := c.Get(pass)
@@ -204,7 +202,6 @@ type Auth_User struct {
 // @Param        Authorization  header    string  true  "JWT Token"
 // @Failure      401            {object}  map[string]string  "Unauthorized"
 // @Failure      500            {object}  map[string]string  "Internal Server Error"
-
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		user := Auth_User{}
@@ -284,12 +281,18 @@ func AuthMiddleware() gin.HandlerFunc {
 // @Description  Retrieve information about the currently authorized user
 // @Tags         Auth
 // @Produce      json
+// @Param GUID body storage.User true "User UUID"
 // @Success      200  {object}  map[string]string  "Successfully retrieved user information"
 // @Failure      401  {object}  map[string]string  "Unauthorized"
 // @Router       /auth/about [get]
 // @Security     ApiKeyAuth
-
 func InfoAboutHandler(c *gin.Context) {
+
+	// Здесь оказывается вообще все неправильно
+	// Очень хочется переделать, но увы не успею,
+	//Концептуально нужно брать JWT token и его валидировать из хеадера авторизации
+	// так как у гет запроса не должно быть полей body
+	// я конечно попробую успеть - но это не факт
 	guid, exist := c.Get("guid")
 	if !exist {
 		log.Printf("ERROR: not authorized user")
@@ -300,7 +303,7 @@ func InfoAboutHandler(c *gin.Context) {
 		log.Printf("ERROR: not authorized user")
 		return
 	}
-
+	
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "access",
 		"GUID":    guid,
@@ -312,12 +315,12 @@ func InfoAboutHandler(c *gin.Context) {
 // @Description  Refresh JWT and refresh token using the previous refresh token
 // @Tags         Auth
 // @Produce      json
+// @Param Tokens body storage.Tokens true "Tokens"
 // @Success      202  {object}  map[string]string  "Tokens successfully refreshed"
 // @Failure      401  {object}  map[string]string  "Unauthorized"
 // @Failure      500  {object}  map[string]string  "Internal server error"
 // @Router       /auth/refresh [post]
 // @Security     ApiKeyAuth
-
 func RefreshHandler(c *gin.Context) {
 	// нужно удалить токен из базы данных
 	pass := os.Getenv("POSTGRES_PASSWORD")
@@ -400,12 +403,12 @@ func RefreshHandler(c *gin.Context) {
 // @Description  Delete user's authentication data from the database
 // @Tags         Auth
 // @Produce      json
+// @Param GUID body storage.User true "User UUID"
 // @Success      200  {object}  map[string]string  "Successfully logged out"
 // @Failure      401  {object}  map[string]string  "Unauthorized"
 // @Failure      500  {object}  map[string]string  "Internal server error"
 // @Router       /auth/logout [post]
 // @Security     ApiKeyAuth
-
 func LogOutHandler(c *gin.Context){
 	value, exist := c.Get("guid")
 	if !exist{
