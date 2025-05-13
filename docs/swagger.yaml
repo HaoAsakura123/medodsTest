@@ -1,14 +1,31 @@
 basePath: /
 definitions:
+  app.Email:
+    properties:
+      email:
+        type: string
+    required:
+    - email
+    type: object
+  app.GUIDstr:
+    properties:
+      uuid:
+        type: string
+    required:
+    - uuid
+    type: object
   storage.Tokens:
     properties:
       authorisation:
         type: string
       refresh:
         type: string
+      uuid:
+        type: string
     required:
     - authorisation
     - refresh
+    - uuid
     type: object
   storage.User:
     properties:
@@ -32,15 +49,9 @@ info:
   title: TODO App API
   version: "1.0"
 paths:
-  /auth/about:
+  /about:
     get:
       description: Retrieve information about the currently authorized user
-      parameters:
-      - description: JWT Token
-        in: header
-        name: Authorization
-        required: true
-        type: string
       produces:
       - application/json
       responses:
@@ -61,9 +72,11 @@ paths:
       summary: Get information about authorized user
       tags:
       - Auth
-  /auth/logout:
+  /login:
     post:
-      description: Delete user's authentication data from the database
+      consumes:
+      - application/json
+      description: Login by UUID and receive JWT and refresh token
       parameters:
       - description: User UUID
         in: body
@@ -71,6 +84,28 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/storage.User'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: LoginHandler
+      tags:
+      - Auth
+  /logout:
+    delete:
+      description: Delete user's authentication data from the database
+      parameters:
+      - description: User UUID
+        in: body
+        name: GUID
+        required: true
+        schema:
+          $ref: '#/definitions/app.GUIDstr'
       produces:
       - application/json
       responses:
@@ -92,12 +127,10 @@ paths:
             additionalProperties:
               type: string
             type: object
-      security:
-      - ApiKeyAuth: []
       summary: Log out user
       tags:
       - Auth
-  /auth/refresh:
+  /refresh:
     post:
       description: Refresh JWT and refresh token using the previous refresh token
       parameters:
@@ -128,33 +161,7 @@ paths:
             additionalProperties:
               type: string
             type: object
-      security:
-      - ApiKeyAuth: []
       summary: Refresh JWT and refresh token
-      tags:
-      - Auth
-  /login:
-    post:
-      consumes:
-      - application/json
-      description: Login by UUID and receive JWT and refresh token
-      parameters:
-      - description: User UUID
-        in: body
-        name: GUID
-        required: true
-        schema:
-          $ref: '#/definitions/storage.User'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: LoginHandler
       tags:
       - Auth
   /register:
@@ -163,12 +170,12 @@ paths:
       - application/json
       description: Register a user by email and receive a UUID
       parameters:
-      - description: User UUID
+      - description: User EMAIL
         in: body
-        name: GUID
+        name: EMAIL
         required: true
         schema:
-          $ref: '#/definitions/storage.User'
+          $ref: '#/definitions/app.Email'
       produces:
       - application/json
       responses:

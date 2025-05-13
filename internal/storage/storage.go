@@ -22,8 +22,9 @@ type User struct {
 }
 
 type Tokens struct {
-	Authorisation string `json:"authorisation" binding:"required"`
-	Refresh string      `json:"refresh" binding:"required"`
+	RefreshToken string `json:"refresh" binding:"required"`
+	AccessToken  string `json:"authorisation" binding:"required"`
+	GUID         string `json:"uuid" binding:"required"`
 }
 const (
 	users = `

@@ -23,7 +23,7 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/auth/about": {
+        "/about": {
             "get": {
                 "security": [
                     {
@@ -38,15 +38,6 @@ const docTemplate = `{
                     "Auth"
                 ],
                 "summary": "Get information about authorized user",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "JWT Token",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "Successfully retrieved user information",
@@ -69,13 +60,45 @@ const docTemplate = `{
                 }
             }
         },
-        "/auth/logout": {
+        "/login": {
             "post": {
-                "security": [
+                "description": "Login by UUID and receive JWT and refresh token",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "LoginHandler",
+                "parameters": [
                     {
-                        "ApiKeyAuth": []
+                        "description": "User UUID",
+                        "name": "GUID",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/storage.User"
+                        }
                     }
                 ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/logout": {
+            "delete": {
                 "description": "Delete user's authentication data from the database",
                 "produces": [
                     "application/json"
@@ -91,7 +114,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/storage.User"
+                            "$ref": "#/definitions/app.GUIDstr"
                         }
                     }
                 ],
@@ -126,13 +149,8 @@ const docTemplate = `{
                 }
             }
         },
-        "/auth/refresh": {
+        "/refresh": {
             "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
                 "description": "Refresh JWT and refresh token using the previous refresh token",
                 "produces": [
                     "application/json"
@@ -183,43 +201,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/login": {
-            "post": {
-                "description": "Login by UUID and receive JWT and refresh token",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Auth"
-                ],
-                "summary": "LoginHandler",
-                "parameters": [
-                    {
-                        "description": "User UUID",
-                        "name": "GUID",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/storage.User"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
         "/register": {
             "post": {
                 "description": "Register a user by email and receive a UUID",
@@ -235,12 +216,12 @@ const docTemplate = `{
                 "summary": "Register a new user",
                 "parameters": [
                     {
-                        "description": "User UUID",
-                        "name": "GUID",
+                        "description": "User EMAIL",
+                        "name": "EMAIL",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/storage.User"
+                            "$ref": "#/definitions/app.Email"
                         }
                     }
                 ],
@@ -277,17 +258,43 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "app.Email": {
+            "type": "object",
+            "required": [
+                "email"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                }
+            }
+        },
+        "app.GUIDstr": {
+            "type": "object",
+            "required": [
+                "uuid"
+            ],
+            "properties": {
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
         "storage.Tokens": {
             "type": "object",
             "required": [
                 "authorisation",
-                "refresh"
+                "refresh",
+                "uuid"
             ],
             "properties": {
                 "authorisation": {
                     "type": "string"
                 },
                 "refresh": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }

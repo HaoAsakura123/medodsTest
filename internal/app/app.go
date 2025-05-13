@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/HaoAsakura123/medodsTest/internal/pkg"
@@ -33,13 +34,15 @@ func InitRouter(){
 
 	r.POST("/register", RegisterHandler)
 	r.POST("/login", LoginHandler)
-	authGroup := r.Group("/auth")
-	authGroup.Use(AuthMiddleware())
-	{
-		authGroup.GET("/about", InfoAboutHandler)
-		authGroup.POST("/refresh", RefreshHandler)
-		authGroup.DELETE("/logout", LogOutHandler) 
-	}
+	r.POST("/refresh", RefreshHandler)
+	// authGroup := r.Group("/auth")
+	// authGroup.Use(AuthMiddleware())
+	// {
+	// 	authGroup.GET("/about", InfoAboutHandler)
+	// }
+	r.GET("/about", InfoAboutHandler)
+	r.DELETE("/logout", LogOutHandler) 
+	
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.Run(":8080")
 }
@@ -134,13 +137,16 @@ func LoginHandler(c *gin.Context) {
 	})
 
 }
+type Email struct{
+	Email string `json:"email" binding:"required"`
+}
 
 // @Summary      Register a new user
 // @Description  Register a user by email and receive a UUID
 // @Tags         Auth
 // @Accept       json
 // @Produce      json
-// @Param GUID body storage.User true "User UUID"
+// @Param EMAIL body Email true "User EMAIL"
 // @Success      200   {object}  map[string]string  "User successfully registered"
 // @Failure      400   {object}  map[string]string  "Validation error"
 // @Failure      500   {object}  map[string]string  "Internal server error"
@@ -195,121 +201,7 @@ type Auth_User struct {
 	GUID string `json:"uuid"`
 }
 
-// @Summary      Authorization Middleware
-// @Description  Middleware to validate JWT token and refresh token
-// @Tags         Middleware
-// @Security     ApiKeyAuth
-// @Param        Authorization  header    string  true  "JWT Token"
-// @Failure      401            {object}  map[string]string  "Unauthorized"
-// @Failure      500            {object}  map[string]string  "Internal Server Error"
-func AuthMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		user := Auth_User{}
-		if err := c.ShouldBindJSON(&user); err != nil {
-			log.Printf("ERROR: Validation error: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			c.Abort()
-		}
-		c.Set("refresh", user.RefreshToken)
-		secret := os.Getenv("JWTSecretKey")
-		m := pkg.Manager{SecretKey: secret}
-		pass := os.Getenv("POSTGRES_PASSWORD")
-		value, exists := c.Get(pass)
-		if !exists {
-			log.Printf("ERROR: should be a pass for db:")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "something go wrong"})
-			c.Abort()
-		}
-		db := value.(*storage.Database)
-		// проверить jwt вообще актуален ли? +
-		// проверка есть ли refresh токен в бд
 
-		claims, err := m.ValidateJWT(user.JWTtoken)
-		if err != nil {
-			log.Printf("ERROR: Uncorrect authorisation: %v", err)
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-			if user.GUID != ""{
-				storage.DeleteAuth(db, user.GUID)
-			}
-			c.Abort()
-		}
-		sub, ok := claims["sub"]
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing sub claim"})
-			return
-		}
-		
-		GUID, ok := sub.(string)
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid sub claim type"})
-			return
-		}
-		c.Set("guid", GUID)
-		query := `SELECT password_hash FROM auth_users WHERE uuid = $1`
-		row := db.BD.QueryRow(query, GUID)
-
-		var hashPass string
-		err = row.Scan(&hashPass)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				log.Printf("User not found: %s", GUID)
-				c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-			} else {
-				log.Printf("Database error for user %s: %v", GUID, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-			}
-			storage.DeleteAuth(db, user.GUID)
-			c.Abort()
-		}
-		//
-		err = pkg.UnhashToken(hashPass, user.RefreshToken)
-		if err != nil {
-			log.Printf("ERROR: invalid refresh token")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "something go wrong"})
-			storage.DeleteAuth(db, user.GUID)
-			c.Abort()
-		}
-
-
-		c.Next()
-
-		//нужно 
-	}
-}
-
-// @Summary      Get information about authorized user
-// @Description  Retrieve information about the currently authorized user
-// @Tags         Auth
-// @Produce      json
-// @Param GUID body storage.User true "User UUID"
-// @Success      200  {object}  map[string]string  "Successfully retrieved user information"
-// @Failure      401  {object}  map[string]string  "Unauthorized"
-// @Router       /auth/about [get]
-// @Security     ApiKeyAuth
-func InfoAboutHandler(c *gin.Context) {
-
-	// Здесь оказывается вообще все неправильно
-	// Очень хочется переделать, но увы не успею,
-	//Концептуально нужно брать JWT token и его валидировать из хеадера авторизации
-	// так как у гет запроса не должно быть полей body
-	// я конечно попробую успеть - но это не факт
-	guid, exist := c.Get("guid")
-	if !exist {
-		log.Printf("ERROR: not authorized user")
-		return
-	}
-	refresh, exist := c.Get("refresh")
-	if !exist {
-		log.Printf("ERROR: not authorized user")
-		return
-	}
-	
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "access",
-		"GUID":    guid,
-		"refresh": refresh,
-	})
-}
 
 // @Summary      Refresh JWT and refresh token
 // @Description  Refresh JWT and refresh token using the previous refresh token
@@ -319,117 +211,177 @@ func InfoAboutHandler(c *gin.Context) {
 // @Success      202  {object}  map[string]string  "Tokens successfully refreshed"
 // @Failure      401  {object}  map[string]string  "Unauthorized"
 // @Failure      500  {object}  map[string]string  "Internal server error"
-// @Router       /auth/refresh [post]
-// @Security     ApiKeyAuth
+// @Router       /refresh [post]
 func RefreshHandler(c *gin.Context) {
-	// нужно удалить токен из базы данных
-	pass := os.Getenv("POSTGRES_PASSWORD")
-	value, exists := c.Get(pass)
+	tokens := storage.Tokens{}
 
-	if !exists {
-		log.Printf("ERROR: should be a pass for db:")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "something go wrong"})
-		return
-	}
+    if err := c.ShouldBindJSON(&tokens); err != nil {
+		log.Printf("Bad request %v", err)
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
 
-	bd := value.(*storage.Database)
+    pass := os.Getenv("POSTGRES_PASSWORD")
+    value, exists := c.Get(pass)
+    if !exists {
+		log.Printf("database error")
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+        return
+    }
 
-	secret := os.Getenv("JWTSecretKey")
-	m := pkg.Manager{SecretKey: secret}
-	guid, exist := c.Get("guid")
-	if !exist {
-		log.Printf("ERROR: not authorized user")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	GUID := guid.(string)
-	newAccessToken, err := m.NewJWT(storage.User{GUID: GUID}, 25*time.Minute)
-	if err != nil {
-		log.Printf("ERROR: cannot create access token")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "something go wrong"})
-		storage.DeleteAuth(bd, GUID)
-		return
-	}
-	newRefreshToken, err := m.NewRefreshToken(GUID, time.Duration(time.Hour))
-	if err != nil {
-		log.Printf("ERROR: cannot create refresh token")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "something go wrong"})
-		storage.DeleteAuth(bd, GUID)
-		return
-	}
-	hashPass, err := pkg.HashToken(newRefreshToken)
-	if err != nil {
-		log.Printf("ERROR: cannot create hash from refresh")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "something go wrong"})
-		storage.DeleteAuth(bd, GUID)
-		return
-	}
+    db := value.(*storage.Database)
+    
+    query := `SELECT password_hash FROM auth_users WHERE uuid = $1`
+    row := db.BD.QueryRow(query, tokens.GUID)
 
-	// проверяем прошлые данные user-agent и если они не совпадают то запретить - если запрещено - то удалить авторизацию пользователя
-	row := bd.BD.QueryRow(`SELECT user_agent FROM auth_users WHERE uuid = $1`, GUID)
-	var userAgent string
-	err = row.Scan(&userAgent)
-	if err != nil {
-		log.Printf("ERROR: cannot scan agent %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "something go wrong"})
-		storage.DeleteAuth(bd, GUID)
-		return
+    var hashPass string
+    if err := row.Scan(&hashPass); err != nil {
+        if err == sql.ErrNoRows {
+            c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh token"})
+        } else {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+        }
+        return
+    }
+
+    if err := pkg.UnhashToken(hashPass, tokens.RefreshToken); err != nil {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh token"})
+        return
+    }
+    secret := os.Getenv("JWTSecretKey")
+    m := pkg.Manager{SecretKey: secret}
+
+	//guid from refresh != guid from jwt
+	guidRefresh, err := m.ValidateRefreshToken(tokens.RefreshToken)
+	if err != nil{
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh token"})
+        return
+	}
+	guidAccess, err := m.ValidateJWT(tokens.AccessToken)
+	if err != nil{
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid access token"})
+        return
+	}
+	if guidAccess != guidRefresh && guidAccess != tokens.GUID{
+		log.Printf("someone changed tokens")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh or access token"})
+        return
 	}
 
 	//
 
-	query := `UPDATE auth_users SET password_hash = $1, expired_at = NOW() + INTERVAL '31 day' WHERE uuid = $2 `
-	result, err := bd.BD.Exec(query, hashPass, GUID)
-	if err != nil {
-		log.Printf("ERROR: cannot update auth_user %v:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot update auth_user"})
-		return
-	}
-	col, err := result.RowsAffected()
-	if col > 1 || err != nil{
-		log.Printf("ERROR: too much updated value %v:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "too much updated value"})
-		return
-	}
-	c.JSON(http.StatusAccepted, gin.H{
-		"refresh":   newRefreshToken,
-		"authorisation":    newAccessToken,
-	})
+    newAccessToken, err := m.NewJWT(storage.User{GUID: tokens.GUID}, 25*time.Minute)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create token"})
+        return
+    }
+
+    newRefreshToken, err := m.NewRefreshToken(tokens.GUID, time.Hour)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create refresh token"})
+        return
+    }
+
+    newHashPass, err := pkg.HashToken(newRefreshToken)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash token"})
+        return
+    }
+
+    _, err = db.BD.Exec(`UPDATE auth_users SET password_hash = $1 WHERE uuid = $2`, newHashPass, tokens.GUID)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update token"})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{
+        "authorisation": newAccessToken,
+        "refresh":      newRefreshToken,
+    })
 }
 
-
+type GUIDstr struct{
+	GUID string `json:"uuid" binding:"required"`
+}
 
 // @Summary      Log out user
 // @Description  Delete user's authentication data from the database
 // @Tags         Auth
 // @Produce      json
-// @Param GUID body storage.User true "User UUID"
+// @Param GUID body GUIDstr true "User UUID"
 // @Success      200  {object}  map[string]string  "Successfully logged out"
 // @Failure      401  {object}  map[string]string  "Unauthorized"
 // @Failure      500  {object}  map[string]string  "Internal server error"
-// @Router       /auth/logout [post]
+// @Router       /logout [delete]
+func LogOutHandler(c *gin.Context) {
+    var req struct {
+        GUID string `json:"uuid" binding:"required"`
+    }
+
+    if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("Bad request %v", err)
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+
+    pass := os.Getenv("POSTGRES_PASSWORD")
+    dbValue, exists := c.Get(pass)
+    if !exists {
+		log.Printf("errors with database")
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+        return
+    }
+
+    db := dbValue.(*storage.Database)
+    storage.DeleteAuth(db, req.GUID)
+    
+    c.JSON(http.StatusOK, gin.H{
+        "status": "success",
+        "GUID":   req.GUID,
+    })
+}
+
+
+// @Summary      Get information about authorized user
+// @Description  Retrieve information about the currently authorized user
+// @Tags         Auth
+// @Produce      json
+// @Success      200  {object}  map[string]string  "Successfully retrieved user information"
+// @Failure      401  {object}  map[string]string  "Unauthorized"
+// @Router       /about [get]
 // @Security     ApiKeyAuth
-func LogOutHandler(c *gin.Context){
-	value, exist := c.Get("guid")
-	if !exist{
-		log.Printf("Anuthorized user")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+func InfoAboutHandler(c *gin.Context) {
+
+	// Здесь оказывается вообще все неправильно
+	// Очень хочется переделать, но увы не успею,
+	//Концептуально нужно брать JWT token и его валидировать из хеадера авторизации
+	// так как у гет запроса не должно быть полей body
+	// я конечно попробую успеть - но это не факт
+	// вроде подправил
+    authHeader := c.GetHeader("Authorization")
+    if authHeader == "" {
+		log.Printf("Authorization header is required!")
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is required"})
+        return
+    }
+	parts := strings.Split(authHeader, " ")
+    if len(parts) != 2 || parts[0] != "Bearer" {
+        log.Printf("invalid authorization header format")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid authorization header format"})
+        return
+    }
+	secret := os.Getenv("JWTSecretKey")
+    m := pkg.Manager{SecretKey: secret}
+	guid, err := m.ValidateJWT(parts[1])
+	if err != nil{
+		log.Printf("invalid jwt token")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized user"})
 		return
 	}
-	GUID := value.(string)
-	pass := os.Getenv("POSTGRES_PASSWORD")
-	database, exist := c.Get(pass)
-
-	if !exist {
-		log.Printf("ERROR: should be a pass for db:")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "something go wrong"})
-		return
-	}
-
-	bd := database.(*storage.Database)
-	storage.DeleteAuth(bd, GUID)
+	
 	c.JSON(http.StatusOK, gin.H{
-		"status": "access",
-		"logout": GUID,
+		"status":  "access",
+		"GUID":    guid,
 	})
 }
+
