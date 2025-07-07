@@ -30,17 +30,17 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Retrieve information about the currently authorized user",
+                "description": "Get information about authenticated user",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Auth"
                 ],
-                "summary": "Get information about authorized user",
+                "summary": "Get user info",
                 "responses": {
                     "200": {
-                        "description": "Successfully retrieved user information",
+                        "description": "User information",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -56,13 +56,22 @@ const docTemplate = `{
                                 "type": "string"
                             }
                         }
+                    },
+                    "500": {
+                        "description": "User not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
                     }
                 }
             }
         },
         "/login": {
             "post": {
-                "description": "Login by UUID and receive JWT and refresh token",
+                "description": "Login by UUID and receive JWT tokens",
                 "consumes": [
                     "application/json"
                 ],
@@ -72,21 +81,48 @@ const docTemplate = `{
                 "tags": [
                     "Auth"
                 ],
-                "summary": "LoginHandler",
+                "summary": "Login user",
                 "parameters": [
                     {
                         "description": "User UUID",
-                        "name": "GUID",
+                        "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/storage.User"
+                            "$ref": "#/definitions/structure.User"
                         }
                     }
                 ],
                 "responses": {
                     "201": {
-                        "description": "Created",
+                        "description": "Tokens successfully created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Validation error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "User not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -98,26 +134,20 @@ const docTemplate = `{
             }
         },
         "/logout": {
-            "delete": {
-                "description": "Delete user's authentication data from the database",
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Invalidate user's session",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Auth"
                 ],
-                "summary": "Log out user",
-                "parameters": [
-                    {
-                        "description": "User UUID",
-                        "name": "GUID",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/app.GUIDstr"
-                        }
-                    }
-                ],
+                "summary": "Logout user",
                 "responses": {
                     "200": {
                         "description": "Successfully logged out",
@@ -151,28 +181,45 @@ const docTemplate = `{
         },
         "/refresh": {
             "post": {
-                "description": "Refresh JWT and refresh token using the previous refresh token",
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Refresh access and refresh tokens",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Auth"
                 ],
-                "summary": "Refresh JWT and refresh token",
+                "summary": "Refresh tokens",
                 "parameters": [
                     {
-                        "description": "Tokens",
-                        "name": "Tokens",
+                        "description": "Refresh token",
+                        "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/storage.Tokens"
+                            "$ref": "#/definitions/app.authUsers"
                         }
                     }
                 ],
                 "responses": {
-                    "202": {
+                    "200": {
                         "description": "Tokens successfully refreshed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Validation error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -203,7 +250,7 @@ const docTemplate = `{
         },
         "/register": {
             "post": {
-                "description": "Register a user by email and receive a UUID",
+                "description": "Register user by email and receive UUID",
                 "consumes": [
                     "application/json"
                 ],
@@ -216,12 +263,12 @@ const docTemplate = `{
                 "summary": "Register a new user",
                 "parameters": [
                     {
-                        "description": "User EMAIL",
-                        "name": "EMAIL",
+                        "description": "User email",
+                        "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/app.Email"
+                            "$ref": "#/definitions/app.email"
                         }
                     }
                 ],
@@ -244,6 +291,15 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "409": {
+                        "description": "User already exists",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
@@ -258,7 +314,18 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "app.Email": {
+        "app.authUsers": {
+            "type": "object",
+            "required": [
+                "refresh"
+            ],
+            "properties": {
+                "refresh": {
+                    "type": "string"
+                }
+            }
+        },
+        "app.email": {
             "type": "object",
             "required": [
                 "email"
@@ -269,37 +336,7 @@ const docTemplate = `{
                 }
             }
         },
-        "app.GUIDstr": {
-            "type": "object",
-            "required": [
-                "uuid"
-            ],
-            "properties": {
-                "uuid": {
-                    "type": "string"
-                }
-            }
-        },
-        "storage.Tokens": {
-            "type": "object",
-            "required": [
-                "authorisation",
-                "refresh",
-                "uuid"
-            ],
-            "properties": {
-                "authorisation": {
-                    "type": "string"
-                },
-                "refresh": {
-                    "type": "string"
-                },
-                "uuid": {
-                    "type": "string"
-                }
-            }
-        },
-        "storage.User": {
+        "structure.User": {
             "type": "object",
             "required": [
                 "uuid"

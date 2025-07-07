@@ -5,15 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	"log"
 
-	//"math/rand"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/HaoAsakura123/medodsTest/internal/storage"
-
+	"github.com/HaoAsakura123/medodsTest/internal/structure"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -23,13 +20,13 @@ type Manager struct {
 }
 
 type TokenManager interface {
-	NewJWT(user storage.User, ttl time.Duration) (string, error)
+	NewJWT(user structure.User, ttl time.Duration) (string, error)
 	NewRefreshToken() (string, error)
 	ValidateJWT(tokenString string) (string, error)
-	ValidateRefreshToken(b64Token string) (string, error) 
+	ValidateRefreshToken(b64Token string) (string, error)
 }
 
-func (m *Manager) NewJWT(user storage.User, ttl time.Duration) (string, error) {
+func (m *Manager) NewJWT(user structure.User, ttl time.Duration) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS512, jwt.RegisteredClaims{
 		ExpiresAt: &jwt.NumericDate{Time: time.Now().Add(ttl)},
 		Subject:   user.GUID,
@@ -37,111 +34,105 @@ func (m *Manager) NewJWT(user storage.User, ttl time.Duration) (string, error) {
 	return token.SignedString([]byte(m.SecretKey))
 }
 
-
 func (m *Manager) NewRefreshToken(guid string, expiry time.Duration) (string, error) {
-    expiredAt := time.Now().Add(expiry).Unix()
-    payload := fmt.Sprintf("%s:%d", guid, expiredAt)
-    
-    h := hmac.New(sha256.New, []byte(m.SecretKey))
-    h.Write([]byte(payload))
-    signature := h.Sum(nil)
-    
-    token := fmt.Sprintf("%s.%s", payload, base64.URLEncoding.EncodeToString(signature))
-    
-    return base64.URLEncoding.EncodeToString([]byte(token)), nil
+	expiredAt := time.Now().Add(expiry).Unix()
+	payload := fmt.Sprintf("%s:%d", guid, expiredAt)
+
+	h := hmac.New(sha256.New, []byte(m.SecretKey))
+	h.Write([]byte(payload))
+	signature := h.Sum(nil)
+
+	// Формируем токен без дополнительного кодирования
+	token := fmt.Sprintf("%s.%s",
+		base64.URLEncoding.EncodeToString([]byte(payload)),
+		base64.URLEncoding.EncodeToString(signature))
+
+	return token, nil
 }
 
-func (m *Manager) ValidateRefreshToken(b64Token string) (string, error) {
+func (m *Manager) ValidateRefreshToken(token string) (string, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 2 {
+		return "", fmt.Errorf("invalid refresh token format")
+	}
 
-    tokenBytes, err := base64.URLEncoding.DecodeString(b64Token)
-    if err != nil {
-		log.Printf("invalid token encoding")
-        return "", fmt.Errorf("invalid token encoding")
-    }
-    
-    parts := strings.Split(string(tokenBytes), ".")
-    if len(parts) != 2 {
-		log.Printf("invalid token format")
-        return "", fmt.Errorf("invalid token format")
-    }
-    
-    payload := parts[0]
-    receivedSig, err := base64.URLEncoding.DecodeString(parts[1])
-    if err != nil {
-		log.Printf("invalid signature format")
-        return "", fmt.Errorf("invalid signature format")
-    }
-    
-    h := hmac.New(sha256.New, []byte(m.SecretKey))
-    h.Write([]byte(payload))
-    expectedSig := h.Sum(nil)
-    
-    if !hmac.Equal(receivedSig, expectedSig) {
-		log.Printf("invalid token signature")
-        return "", fmt.Errorf("invalid token signature")
-    }
-    
-    payloadParts := strings.Split(payload, ":")
-    if len(payloadParts) != 2 {
-		log.Printf("invalid payload format")
-        return "", fmt.Errorf("invalid payload format")
-    }
-    
-    guid := payloadParts[0]
-    expiredAt, err := strconv.ParseInt(payloadParts[1], 10, 64)
-    if err != nil {
-		log.Printf("invalid expiration time")
-        return "", fmt.Errorf("invalid expiration time")
-    }
-    
-    if time.Now().Unix() > expiredAt {
-		log.Printf("token expired")
-        return "", fmt.Errorf("token expired")
-    }
-    
-    return guid, nil
+	payloadBytes, err := base64.URLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return "", fmt.Errorf("invalid payload encoding: %v", err)
+	}
+	payload := string(payloadBytes)
+
+	receivedSig, err := base64.URLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", fmt.Errorf("invalid signature encoding: %v", err)
+	}
+
+	h := hmac.New(sha256.New, []byte(m.SecretKey))
+	h.Write([]byte(payload))
+	expectedSig := h.Sum(nil)
+
+	if !hmac.Equal(receivedSig, expectedSig) {
+		return "", fmt.Errorf("invalid refresh token signature")
+	}
+
+	payloadParts := strings.Split(payload, ":")
+	if len(payloadParts) != 2 {
+		return "", fmt.Errorf("invalid payload format")
+	}
+
+	guid := payloadParts[0]
+	expiredAt, err := strconv.ParseInt(payloadParts[1], 10, 64)
+	if err != nil {
+		return "", fmt.Errorf("invalid expiration time")
+	}
+
+	if time.Now().Unix() > expiredAt {
+		return "", fmt.Errorf("token refresh expired")
+	}
+
+	return guid, nil
 }
-
 func HashToken(token string) (string, error) {
-    shaHash := sha256.Sum256([]byte(token))
-    
-    hash, err := bcrypt.GenerateFromPassword(shaHash[:], 14)
-    if err != nil {
-        return "", err
-    }
+	shaHash := sha256.Sum256([]byte(token))
 
-    return string(hash), nil
+	hash, err := bcrypt.GenerateFromPassword(shaHash[:], 14)
+	if err != nil {
+		return "", err
+	}
+
+	return string(hash), nil
 }
 
 func UnhashToken(hash, token string) error {
-    shaHash := sha256.Sum256([]byte(token))
-    return bcrypt.CompareHashAndPassword([]byte(hash), shaHash[:])
+	shaHash := sha256.Sum256([]byte(token))
+	return bcrypt.CompareHashAndPassword([]byte(hash), shaHash[:])
 }
 
 func (m *Manager) ValidateJWT(tokenString string) (string, error) {
-    token, _, err := new(jwt.Parser).ParseUnverified(tokenString, jwt.MapClaims{})
-    if err != nil {
-		log.Printf("invalid token format: %v", err)
-        return "", fmt.Errorf("invalid token format: %v", err)
-    }
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(m.SecretKey), nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS512.Alg()}))
 
-    claims, ok := token.Claims.(jwt.MapClaims)
-    if !ok {
-		log.Printf("invalid token claims")
-        return "", fmt.Errorf("invalid token claims")
-    }
+	if err != nil {
+		return "", fmt.Errorf("invalid token: %w", err)
+	}
 
-    sub, ok := claims["sub"].(string)
-    if !ok || sub == "" {
-        return "", fmt.Errorf("missing or invalid sub claim")
-    }
+	if !token.Valid {
+		return "", fmt.Errorf("invalid token")
+	}
 
-    validToken, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-        return []byte(m.SecretKey), nil
-    }, jwt.WithValidMethods([]string{jwt.SigningMethodHS512.Alg()}))
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", fmt.Errorf("invalid token claims")
+	}
 
-    if validToken != nil && validToken.Valid {
-        return sub, nil
-    }
-    return sub, fmt.Errorf("invalid token: %v", err)
+	sub, ok := claims["sub"].(string)
+	if !ok || sub == "" {
+		return "", fmt.Errorf("missing sub claim")
+	}
+
+	return sub, nil
 }

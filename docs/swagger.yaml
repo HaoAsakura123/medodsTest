@@ -1,33 +1,20 @@
 basePath: /
 definitions:
-  app.Email:
+  app.authUsers:
+    properties:
+      refresh:
+        type: string
+    required:
+    - refresh
+    type: object
+  app.email:
     properties:
       email:
         type: string
     required:
     - email
     type: object
-  app.GUIDstr:
-    properties:
-      uuid:
-        type: string
-    required:
-    - uuid
-    type: object
-  storage.Tokens:
-    properties:
-      authorisation:
-        type: string
-      refresh:
-        type: string
-      uuid:
-        type: string
-    required:
-    - authorisation
-    - refresh
-    - uuid
-    type: object
-  storage.User:
+  structure.User:
     properties:
       email:
         type: string
@@ -51,12 +38,12 @@ info:
 paths:
   /about:
     get:
-      description: Retrieve information about the currently authorized user
+      description: Get information about authenticated user
       produces:
       - application/json
       responses:
         "200":
-          description: Successfully retrieved user information
+          description: User information
           schema:
             additionalProperties:
               type: string
@@ -67,45 +54,62 @@ paths:
             additionalProperties:
               type: string
             type: object
+        "500":
+          description: User not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
       security:
       - ApiKeyAuth: []
-      summary: Get information about authorized user
+      summary: Get user info
       tags:
       - Auth
   /login:
     post:
       consumes:
       - application/json
-      description: Login by UUID and receive JWT and refresh token
+      description: Login by UUID and receive JWT tokens
       parameters:
       - description: User UUID
         in: body
-        name: GUID
+        name: request
         required: true
         schema:
-          $ref: '#/definitions/storage.User'
+          $ref: '#/definitions/structure.User'
       produces:
       - application/json
       responses:
         "201":
-          description: Created
+          description: Tokens successfully created
           schema:
             additionalProperties:
               type: string
             type: object
-      summary: LoginHandler
+        "400":
+          description: Validation error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: User not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Login user
       tags:
       - Auth
   /logout:
-    delete:
-      description: Delete user's authentication data from the database
-      parameters:
-      - description: User UUID
-        in: body
-        name: GUID
-        required: true
-        schema:
-          $ref: '#/definitions/app.GUIDstr'
+    get:
+      description: Invalidate user's session
       produces:
       - application/json
       responses:
@@ -127,24 +131,34 @@ paths:
             additionalProperties:
               type: string
             type: object
-      summary: Log out user
+      security:
+      - ApiKeyAuth: []
+      summary: Logout user
       tags:
       - Auth
   /refresh:
     post:
-      description: Refresh JWT and refresh token using the previous refresh token
+      consumes:
+      - application/json
+      description: Refresh access and refresh tokens
       parameters:
-      - description: Tokens
+      - description: Refresh token
         in: body
-        name: Tokens
+        name: request
         required: true
         schema:
-          $ref: '#/definitions/storage.Tokens'
+          $ref: '#/definitions/app.authUsers'
       produces:
       - application/json
       responses:
-        "202":
+        "200":
           description: Tokens successfully refreshed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Validation error
           schema:
             additionalProperties:
               type: string
@@ -161,21 +175,23 @@ paths:
             additionalProperties:
               type: string
             type: object
-      summary: Refresh JWT and refresh token
+      security:
+      - ApiKeyAuth: []
+      summary: Refresh tokens
       tags:
       - Auth
   /register:
     post:
       consumes:
       - application/json
-      description: Register a user by email and receive a UUID
+      description: Register user by email and receive UUID
       parameters:
-      - description: User EMAIL
+      - description: User email
         in: body
-        name: EMAIL
+        name: request
         required: true
         schema:
-          $ref: '#/definitions/app.Email'
+          $ref: '#/definitions/app.email'
       produces:
       - application/json
       responses:
@@ -187,6 +203,12 @@ paths:
             type: object
         "400":
           description: Validation error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: User already exists
           schema:
             additionalProperties:
               type: string
