@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/HaoAsakura123/medodsTest/internal/app"
-
 )
 
 //	@title			TODO App API
@@ -27,8 +26,3 @@ import (
 func main() {
 	app.InitRouter()
 }
-
-// bd tables : auth_users users
-// bd : authentification
-
-
