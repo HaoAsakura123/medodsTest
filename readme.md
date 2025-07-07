@@ -6,7 +6,7 @@
 - так как тестовый репозиторий не стал добавлять .env в гитигнор
 3. 
 - Запускать командой: docker-compose -f docker-compose.yml up -d 
-
+- 
 - Пересобирать проект: docker-compose down && docker-compose up -d --build --force-recreate --no-deps
 
 4. 
